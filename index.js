@@ -54,17 +54,13 @@ function parseInput(text) {
 
 function createUser(userId) {
   if (!userData[userId]) {
-    userData[userId] = {
-      entries: []
-    };
+    userData[userId] = { entries: [] };
   }
 }
 
 function resetAllUsers() {
   for (const id in userData) {
-    userData[id] = {
-      entries: []
-    };
+    userData[id] = { entries: [] };
   }
 }
 
@@ -92,7 +88,6 @@ function getSummary(userId) {
   for (let i = 1; i <= 6; i++) {
     totalPoints += totals[i].points;
     totalReserve += totals[i].reserve;
-
     reply += `ขาที่ ${i}: ${totals[i].points} คะแนน | กันไว้ ${totals[i].reserve} คะแนน\n`;
   }
 
@@ -113,6 +108,8 @@ async function handleEvent(event) {
   const baseUrl = 'https://line-bot-8ro4.onrender.com';
 
   const images = {
+    open: `${baseUrl}/open.jpg.png`,
+    close: `${baseUrl}/close.jpg.png`,
     '1': `${baseUrl}/1.jpg.png`,
     '2': `${baseUrl}/2.jpg.png`,
     '3': `${baseUrl}/3.jpg.png`
@@ -122,19 +119,33 @@ async function handleEvent(event) {
     isOpen = true;
     resetAllUsers();
 
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: 'เปิดรับคะแนนแล้ว\nเริ่มนับคะแนนใหม่ตั้งแต่ตอนนี้'
-    });
+    return client.replyMessage(event.replyToken, [
+      {
+        type: 'image',
+        originalContentUrl: images.open,
+        previewImageUrl: images.open
+      },
+      {
+        type: 'text',
+        text: 'เปิดรับคะแนนแล้ว\nเริ่มนับใหม่ตั้งแต่ตอนนี้'
+      }
+    ]);
   }
 
   if (text === 'ปิด') {
     isOpen = false;
 
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: 'ตอนนี้ปิดรับคะแนนแล้ว'
-    });
+    return client.replyMessage(event.replyToken, [
+      {
+        type: 'image',
+        originalContentUrl: images.close,
+        previewImageUrl: images.close
+      },
+      {
+        type: 'text',
+        text: 'ปิดการเดิมพัน'
+      }
+    ]);
   }
 
   if (images[text]) {
@@ -142,39 +153,6 @@ async function handleEvent(event) {
       type: 'image',
       originalContentUrl: images[text],
       previewImageUrl: images[text]
-    });
-  }
-
-  if (text === 'เมนู') {
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text:
-`ระบบเลือกขาและเก็บคะแนน
-
-สถานะตอนนี้: ${isOpen ? 'เปิดรับคะแนน' : 'ปิดรับคะแนน'}
-
-รูปแบบ:
-ขา/คะแนน
-
-ตัวอย่าง:
-1/100
-2/100
-3/100
-4/100
-5/100
-6/100
-
-เลือกหลายขาพร้อมกันได้:
-1/100 2/50 3/200
-
-ระบบกันคะแนนไว้ x2
-เช่น 1/100 = กันไว้ 200
-
-คำสั่ง:
-เปิด = เปิดรับคะแนนและเริ่มนับใหม่
-ปิด = ปิดรับคะแนน
-c = ดูสรุปคะแนน
-x = ล้างคะแนนของคุณ`
     });
   }
 
@@ -186,9 +164,7 @@ x = ล้างคะแนนของคุณ`
   }
 
   if (text.toLowerCase() === 'x') {
-    userData[userId] = {
-      entries: []
-    };
+    userData[userId] = { entries: [] };
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
@@ -199,7 +175,7 @@ x = ล้างคะแนนของคุณ`
   if (!isOpen) {
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ตอนนี้ปิดรับคะแนนแล้ว'
+      text: 'ปิดการเดิมพัน'
     });
   }
 
@@ -218,7 +194,6 @@ x = ล้างคะแนนของคุณ`
 
   result.list.forEach(item => {
     userData[userId].entries.push(item);
-
     reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
     reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
   });
