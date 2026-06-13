@@ -10,6 +10,7 @@ const app = express();
 const client = new line.Client(config);
 
 const userData = {};
+let isOpen = true;
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   const events = req.body.events;
@@ -37,7 +38,7 @@ function parseInput(text) {
     if (points < 10) {
       return {
         ok: false,
-        message: 'ขั้นต่ำ 10 บาท\nตัวอย่าง: 1/10'
+        message: 'ขั้นต่ำ 10 คะแนน\nตัวอย่าง: 1/10'
       };
     }
 
@@ -51,6 +52,48 @@ function parseInput(text) {
   return { ok: true, list };
 }
 
+function createUser(userId) {
+  if (!userData[userId]) {
+    userData[userId] = {
+      entries: []
+    };
+  }
+}
+
+function getSummary(userId) {
+  createUser(userId);
+
+  const totals = {
+    1: { points: 0, reserve: 0 },
+    2: { points: 0, reserve: 0 },
+    3: { points: 0, reserve: 0 },
+    4: { points: 0, reserve: 0 },
+    5: { points: 0, reserve: 0 },
+    6: { points: 0, reserve: 0 }
+  };
+
+  userData[userId].entries.forEach(item => {
+    totals[item.choice].points += item.points;
+    totals[item.choice].reserve += item.reserve;
+  });
+
+  let reply = 'สรุปคะแนนของคุณ\n\n';
+  let totalPoints = 0;
+  let totalReserve = 0;
+
+  for (let i = 1; i <= 6; i++) {
+    totalPoints += totals[i].points;
+    totalReserve += totals[i].reserve;
+
+    reply += `ขาที่ ${i}: ${totals[i].points} คะแนน | กันไว้ ${totals[i].reserve} คะแนน\n`;
+  }
+
+  reply += `\nรวมคะแนนจริง: ${totalPoints} คะแนน`;
+  reply += `\nรวมคะแนนกันไว้: ${totalReserve} คะแนน`;
+
+  return reply;
+}
+
 async function handleEvent(event) {
   if (event.type !== 'message' || event.message.type !== 'text') {
     return null;
@@ -62,12 +105,26 @@ async function handleEvent(event) {
   const baseUrl = 'https://line-bot-8ro4.onrender.com';
 
   const images = {
-    'เปิด': `${baseUrl}/open.jpg.png`,
-    'ปิด': `${baseUrl}/close.jpg.png`,
     '1': `${baseUrl}/1.jpg.png`,
     '2': `${baseUrl}/2.jpg.png`,
     '3': `${baseUrl}/3.jpg.png`
   };
+
+  if (text === 'เปิด') {
+    isOpen = true;
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'เปิดรับคะแนนแล้ว'
+    });
+  }
+
+  if (text === 'ปิด') {
+    isOpen = false;
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'ตอนนี้ปิดรับคะแนนแล้ว'
+    });
+  }
 
   if (images[text]) {
     return client.replyMessage(event.replyToken, {
@@ -83,8 +140,7 @@ async function handleEvent(event) {
       text:
 `ระบบเลือกขาและเก็บคะแนน
 
-รูปแบบ:
-ขา/จำนวน
+สถานะตอนนี้: ${isOpen ? 'เปิดรับคะแนน' : 'ปิดรับคะแนน'}
 
 ตัวอย่าง:
 1/100
@@ -94,53 +150,29 @@ async function handleEvent(event) {
 5/100
 6/100
 
-เลือกหลายขาพร้อมกันได้:
+หลายขาพร้อมกัน:
 1/100 2/50 3/200
 
-ระบบจะกันยอดไว้ x2
-เช่น 1/100 = กันยอด 200
+ระบบกันคะแนน x2
+เช่น 1/100 = กันไว้ 200
 
 คำสั่ง:
-c = ดูคะแนนของคุณ
-x = ล้างคะแนนของคุณ`
+เปิด = เปิดรับคะแนน
+ปิด = ปิดรับคะแนน
+c = ดูสรุปคะแนน
+x = ล้างคะแนน`
     });
   }
 
   if (text.toLowerCase() === 'c') {
-    const data = userData[userId];
-
-    if (!data) {
-      return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: 'ยังไม่มีข้อมูลคะแนน'
-      });
-    }
-
-    let reply = 'สรุปคะแนนของคุณ\n\n';
-    let totalPoints = 0;
-    let totalReserve = 0;
-
-    for (let i = 1; i <= 6; i++) {
-      const point = data.points[i] || 0;
-      const reserve = data.reserve[i] || 0;
-
-      totalPoints += point;
-      totalReserve += reserve;
-
-      reply += `ขาที่ ${i}: ${point} บาท | กันไว้ ${reserve} บาท\n`;
-    }
-
-    reply += `\nรวมยอดจริง: ${totalPoints} บาท`;
-    reply += `\nรวมยอดกันไว้: ${totalReserve} บาท`;
-
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: reply
+      text: getSummary(userId)
     });
   }
 
   if (text.toLowerCase() === 'x') {
-    delete userData[userId];
+    userData[userId] = { entries: [] };
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
@@ -148,36 +180,28 @@ x = ล้างคะแนนของคุณ`
     });
   }
 
+  if (!isOpen) {
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'ตอนนี้ปิดรับคะแนนแล้ว'
+    });
+  }
+
   const result = parseInput(text);
 
   if (result.ok) {
-    if (!userData[userId]) {
-      userData[userId] = {
-        points: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
-        reserve: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
-      };
-    }
+    createUser(userId);
 
     let reply = 'บันทึกข้อมูลเรียบร้อย\n\n';
 
     result.list.forEach(item => {
-      userData[userId].points[item.choice] += item.points;
-      userData[userId].reserve[item.choice] += item.reserve;
+      userData[userId].entries.push(item);
 
-      reply += `ขาที่ ${item.choice} +${item.points} บาท\n`;
-      reply += `กันยอดไว้ ${item.reserve} บาท\n\n`;
+      reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
+      reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
     });
 
-    let totalPoints = 0;
-    let totalReserve = 0;
-
-    for (let i = 1; i <= 6; i++) {
-      totalPoints += userData[userId].points[i];
-      totalReserve += userData[userId].reserve[i];
-    }
-
-    reply += `รวมยอดจริงตอนนี้: ${totalPoints} บาท`;
-    reply += `\nรวมยอดกันไว้ตอนนี้: ${totalReserve} บาท`;
+    reply += getSummary(userId);
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
