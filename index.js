@@ -38,7 +38,7 @@ function parseInput(text) {
     if (points < 10) {
       return {
         ok: false,
-        message: 'ขั้นต่ำ 10 คะแนน\nตัวอย่าง: 1/10'
+        message: 'ขั้นต่ำ 10 บาท\nตัวอย่าง: 1/10'
       };
     }
 
@@ -54,13 +54,17 @@ function parseInput(text) {
 
 function createUser(userId) {
   if (!userData[userId]) {
-    userData[userId] = { entries: [] };
+    userData[userId] = {
+      entries: []
+    };
   }
 }
 
 function resetAllUsers() {
   for (const id in userData) {
-    userData[id] = { entries: [] };
+    userData[id] = {
+      entries: []
+    };
   }
 }
 
@@ -88,11 +92,12 @@ function getSummary(userId) {
   for (let i = 1; i <= 6; i++) {
     totalPoints += totals[i].points;
     totalReserve += totals[i].reserve;
-    reply += `ขาที่ ${i}: ${totals[i].points} คะแนน | กันไว้ ${totals[i].reserve} คะแนน\n`;
+
+    reply += `ขาที่ ${i}: ${totals[i].points} บาท | กันไว้ ${totals[i].reserve} บาท\n`;
   }
 
-  reply += `\nรวมคะแนนจริง: ${totalPoints} คะแนน`;
-  reply += `\nรวมคะแนนกันไว้: ${totalReserve} คะแนน`;
+  reply += `\nรวมคะแนนจริง: ${totalPoints} บาท`;
+  reply += `\nรวมคะแนนกันไว้: ${totalReserve} บาท`;
 
   return reply;
 }
@@ -115,39 +120,30 @@ async function handleEvent(event) {
     '3': `${baseUrl}/3.jpg.png`
   };
 
+  // เปิด = ส่งรูปเปิดอย่างเดียว + เริ่มนับใหม่
   if (text === 'เปิด') {
     isOpen = true;
     resetAllUsers();
 
-    return client.replyMessage(event.replyToken, [
-      {
-        type: 'image',
-        originalContentUrl: images.open,
-        previewImageUrl: images.open
-      },
-      {
-        type: 'text',
-        text: 'เปิดรับคะแนนแล้ว\nเริ่มนับใหม่ตั้งแต่ตอนนี้'
-      }
-    ]);
+    return client.replyMessage(event.replyToken, {
+      type: 'image',
+      originalContentUrl: images.open,
+      previewImageUrl: images.open
+    });
   }
 
+  // ปิด = ส่งรูปปิดอย่างเดียว + ปิดรับลงคะแนน
   if (text === 'ปิด') {
     isOpen = false;
 
-    return client.replyMessage(event.replyToken, [
-      {
-        type: 'image',
-        originalContentUrl: images.close,
-        previewImageUrl: images.close
-      },
-      {
-        type: 'text',
-        text: 'ปิดการเดิมพัน'
-      }
-    ]);
+    return client.replyMessage(event.replyToken, {
+      type: 'image',
+      originalContentUrl: images.close,
+      previewImageUrl: images.close
+    });
   }
 
+  // ส่งรูป 1, 2, 3
   if (images[text]) {
     return client.replyMessage(event.replyToken, {
       type: 'image',
@@ -156,6 +152,7 @@ async function handleEvent(event) {
     });
   }
 
+  // ดูสรุป
   if (text.toLowerCase() === 'c') {
     return client.replyMessage(event.replyToken, {
       type: 'text',
@@ -163,19 +160,23 @@ async function handleEvent(event) {
     });
   }
 
+  // ล้างคะแนนตัวเอง
   if (text.toLowerCase() === 'x') {
-    userData[userId] = { entries: [] };
+    userData[userId] = {
+      entries: []
+    };
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ล้างคะแนนของคุณเรียบร้อยแล้ว'
+      text: 'ยกเลิกการเดิมพัน'
     });
   }
 
+  // ถ้าปิดอยู่
   if (!isOpen) {
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ปิดการเดิมพัน'
+      text: 'ปิดรับการเดิมพัน❌'
     });
   }
 
@@ -190,12 +191,13 @@ async function handleEvent(event) {
 
   createUser(userId);
 
-  let reply = 'บันทึกข้อมูลเรียบร้อย\n\n';
+  let reply = 'บันทึกการเดิมพัน\n\n';
 
   result.list.forEach(item => {
     userData[userId].entries.push(item);
-    reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
-    reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
+
+    reply += `ขาที่ ${item.choice} +${item.points} บาท\n`;
+    reply += `กันคะแนนไว้ ${item.reserve} บาท\n\n`;
   });
 
   reply += getSummary(userId);
