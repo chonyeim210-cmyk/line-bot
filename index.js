@@ -10,13 +10,27 @@ const app = express();
 const client = new line.Client(config);
 
 const userData = {};
+const members = {};
+
 let isOpen = false;
+let nextMemberCode = 1;
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   const events = req.body.events;
   await Promise.all(events.map(handleEvent));
   res.status(200).end();
 });
+
+function makeMemberCode() {
+  const code = String(nextMemberCode).padStart(4, '0');
+  nextMemberCode++;
+
+  if (nextMemberCode > 9999) {
+    nextMemberCode = 1;
+  }
+
+  return code;
+}
 
 function parseInput(text) {
   const parts = text.trim().split(/\s+/);
@@ -38,7 +52,7 @@ function parseInput(text) {
     if (points < 10) {
       return {
         ok: false,
-        message: 'ขั้นต่ำ 10 บาท\nตัวอย่าง: 1/10'
+        message: 'ขั้นต่ำ 10 คะแนน\nตัวอย่าง: 1/10'
       };
     }
 
@@ -71,6 +85,8 @@ function resetAllUsers() {
 function getSummary(userId) {
   createUser(userId);
 
+  const member = members[userId];
+
   const totals = {
     1: { points: 0, reserve: 0 },
     2: { points: 0, reserve: 0 },
@@ -86,6 +102,12 @@ function getSummary(userId) {
   });
 
   let reply = 'สรุปคะแนนของคุณ\n\n';
+
+  if (member) {
+    reply += `รหัส: ${member.code}\n`;
+    reply += `ชื่อ: ${member.name}\n\n`;
+  }
+
   let totalPoints = 0;
   let totalReserve = 0;
 
@@ -93,11 +115,11 @@ function getSummary(userId) {
     totalPoints += totals[i].points;
     totalReserve += totals[i].reserve;
 
-    reply += `ขาที่ ${i}: ${totals[i].points} บาท | กันไว้ ${totals[i].reserve} บาท\n`;
+    reply += `ขาที่ ${i}: ${totals[i].points} คะแนน | กันไว้ ${totals[i].reserve} คะแนน\n`;
   }
 
-  reply += `\nรวมเดิมพัน: ${totalPoints} บาท`;
-  reply += `\nกันเด้ง: ${totalReserve} บาท`;
+  reply += `\nรวมคะแนนจริง: ${totalPoints} คะแนน`;
+  reply += `\nรวมคะแนนกันไว้: ${totalReserve} คะแนน`;
 
   return reply;
 }
@@ -120,7 +142,53 @@ async function handleEvent(event) {
     '3': `${baseUrl}/3.jpg.png`
   };
 
-  // เปิด = ส่งรูปเปิดอย่างเดียว + เริ่มนับใหม่
+  if (text.startsWith('สมัคร ')) {
+    const name = text.replace('สมัคร ', '').trim();
+
+    if (!name) {
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'กรุณาพิมพ์: สมัคร ชื่อเล่น'
+      });
+    }
+
+    if (!members[userId]) {
+      members[userId] = {
+        code: makeMemberCode(),
+        name
+      };
+    } else {
+      members[userId].name = name;
+    }
+
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text:
+`สมัครเรียบร้อย
+
+รหัส: ${members[userId].code}
+ชื่อ: ${members[userId].name}`
+    });
+  }
+
+  if (text === 'ฉัน') {
+    if (!members[userId]) {
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'ยังไม่ได้สมัคร\nพิมพ์: สมัคร ชื่อเล่น'
+      });
+    }
+
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text:
+`ข้อมูลของคุณ
+
+รหัส: ${members[userId].code}
+ชื่อ: ${members[userId].name}`
+    });
+  }
+
   if (text === 'เปิด') {
     isOpen = true;
     resetAllUsers();
@@ -132,7 +200,6 @@ async function handleEvent(event) {
     });
   }
 
-  // ปิด = ส่งรูปปิดอย่างเดียว + ปิดรับลงคะแนน
   if (text === 'ปิด') {
     isOpen = false;
 
@@ -143,7 +210,6 @@ async function handleEvent(event) {
     });
   }
 
-  // ส่งรูป 1, 2, 3
   if (images[text]) {
     return client.replyMessage(event.replyToken, {
       type: 'image',
@@ -152,7 +218,6 @@ async function handleEvent(event) {
     });
   }
 
-  // ดูสรุป
   if (text.toLowerCase() === 'c') {
     return client.replyMessage(event.replyToken, {
       type: 'text',
@@ -160,7 +225,6 @@ async function handleEvent(event) {
     });
   }
 
-  // ล้างคะแนนตัวเอง
   if (text.toLowerCase() === 'x') {
     userData[userId] = {
       entries: []
@@ -168,15 +232,21 @@ async function handleEvent(event) {
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ยกเลิกการเดิมพัน'
+      text: 'ล้างคะแนนของคุณเรียบร้อยแล้ว'
     });
   }
 
-  // ถ้าปิดอยู่
   if (!isOpen) {
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ปิดรับการเดิมพัน❌'
+      text: 'ปิดรับลงคะแนน'
+    });
+  }
+
+  if (!members[userId]) {
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'กรุณาสมัครก่อน\nพิมพ์: สมัคร ชื่อเล่น'
     });
   }
 
@@ -191,13 +261,19 @@ async function handleEvent(event) {
 
   createUser(userId);
 
-  let reply = 'บันทึกการเดิมพัน\n\n';
+  let reply =
+`บันทึกคะแนนเรียบร้อย
+
+รหัส: ${members[userId].code}
+ชื่อ: ${members[userId].name}
+
+`;
 
   result.list.forEach(item => {
     userData[userId].entries.push(item);
 
-    reply += `ขาที่ ${item.choice} +${item.points} บาท\n`;
-    reply += `กันเด้ง ${item.reserve} บาท\n\n`;
+    reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
+    reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
   });
 
   reply += getSummary(userId);
