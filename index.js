@@ -96,8 +96,8 @@ function getSummary(userId) {
     reply += `ขาที่ ${i}: ${totals[i].points} บาท | กันไว้ ${totals[i].reserve} บาท\n`;
   }
 
-  reply += `\nรวมคะแนนจริง: ${totalPoints} บาท`;
-  reply += `\nรวมคะแนนกันไว้: ${totalReserve} บาท`;
+  reply += `\nรวมเดิมพัน: ${totalPoints} บาท`;
+  reply += `\nกันเด้ง: ${totalReserve} บาท`;
 
   return reply;
 }
@@ -197,7 +197,7 @@ async function handleEvent(event) {
     userData[userId].entries.push(item);
 
     reply += `ขาที่ ${item.choice} +${item.points} บาท\n`;
-    reply += `กันคะแนนไว้ ${item.reserve} บาท\n\n`;
+    reply += `กันเด้ง ${item.reserve} บาท\n\n`;
   });
 
   reply += getSummary(userId);
