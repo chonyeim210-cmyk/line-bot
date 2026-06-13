@@ -9,7 +9,6 @@ const config = {
 const app = express();
 const client = new line.Client(config);
 
-// เก็บข้อมูลชั่วคราว ถ้า Render รีสตาร์ท ข้อมูลจะหาย
 const userData = {};
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
@@ -42,7 +41,11 @@ function parseInput(text) {
       };
     }
 
-    list.push({ choice, points });
+    list.push({
+      choice,
+      points,
+      reserve: points * 2
+    });
   }
 
   return { ok: true, list };
@@ -66,7 +69,6 @@ async function handleEvent(event) {
     '3': `${baseUrl}/3.jpg.png`
   };
 
-  // ส่งรูปเหมือนของเดิม
   if (images[text]) {
     return client.replyMessage(event.replyToken, {
       type: 'image',
@@ -75,15 +77,14 @@ async function handleEvent(event) {
     });
   }
 
-  // เมนู
   if (text === 'เมนู') {
     return client.replyMessage(event.replyToken, {
       type: 'text',
       text:
 `ระบบเลือกขาและเก็บคะแนน
 
-รูปแบบการพิมพ์:
-ขา/คะแนน
+รูปแบบ:
+ขา/จำนวน
 
 ตัวอย่าง:
 1/100
@@ -96,7 +97,8 @@ async function handleEvent(event) {
 เลือกหลายขาพร้อมกันได้:
 1/100 2/50 3/200
 
-ขั้นต่ำ 10 คะแนน
+ระบบจะกันยอดไว้ x2
+เช่น 1/100 = กันยอด 200
 
 คำสั่ง:
 c = ดูคะแนนของคุณ
@@ -104,8 +106,7 @@ x = ล้างคะแนนของคุณ`
     });
   }
 
-  // ดูสรุป
-  if (text === 'สรุป') {
+  if (text.toLowerCase() === 'c') {
     const data = userData[userId];
 
     if (!data) {
@@ -116,15 +117,21 @@ x = ล้างคะแนนของคุณ`
     }
 
     let reply = 'สรุปคะแนนของคุณ\n\n';
-    let total = 0;
+    let totalPoints = 0;
+    let totalReserve = 0;
 
     for (let i = 1; i <= 6; i++) {
-      const score = data[i] || 0;
-      total += score;
-      reply += `ขาที่ ${i}: ${score} บาท\n`;
+      const point = data.points[i] || 0;
+      const reserve = data.reserve[i] || 0;
+
+      totalPoints += point;
+      totalReserve += reserve;
+
+      reply += `ขาที่ ${i}: ${point} บาท | กันไว้ ${reserve} บาท\n`;
     }
 
-    reply += `\nรวมทั้งหมด: ${total} บาท`;
+    reply += `\nรวมยอดจริง: ${totalPoints} บาท`;
+    reply += `\nรวมยอดกันไว้: ${totalReserve} บาท`;
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
@@ -132,8 +139,7 @@ x = ล้างคะแนนของคุณ`
     });
   }
 
-  // ล้างข้อมูล
-  if (text === 'ล้าง') {
+  if (text.toLowerCase() === 'x') {
     delete userData[userId];
 
     return client.replyMessage(event.replyToken, {
@@ -142,35 +148,36 @@ x = ล้างคะแนนของคุณ`
     });
   }
 
-  // รับข้อมูลแบบ 1/100
   const result = parseInput(text);
 
   if (result.ok) {
     if (!userData[userId]) {
       userData[userId] = {
-        1: 0,
-        2: 0,
-        3: 0,
-        4: 0,
-        5: 0,
-        6: 0
+        points: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
+        reserve: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
       };
     }
 
     let reply = 'บันทึกข้อมูลเรียบร้อย\n\n';
 
     result.list.forEach(item => {
-      userData[userId][item.choice] += item.points;
+      userData[userId].points[item.choice] += item.points;
+      userData[userId].reserve[item.choice] += item.reserve;
+
       reply += `ขาที่ ${item.choice} +${item.points} บาท\n`;
+      reply += `กันยอดไว้ ${item.reserve} บาท\n\n`;
     });
 
-    let total = 0;
+    let totalPoints = 0;
+    let totalReserve = 0;
 
     for (let i = 1; i <= 6; i++) {
-      total += userData[userId][i];
+      totalPoints += userData[userId].points[i];
+      totalReserve += userData[userId].reserve[i];
     }
 
-    reply += `\nรวมตอนนี้: ${total} บาท`;
+    reply += `รวมยอดจริงตอนนี้: ${totalPoints} บาท`;
+    reply += `\nรวมยอดกันไว้ตอนนี้: ${totalReserve} บาท`;
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
