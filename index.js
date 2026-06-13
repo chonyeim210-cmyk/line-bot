@@ -10,7 +10,7 @@ const app = express();
 const client = new line.Client(config);
 
 const userData = {};
-let isOpen = true;
+let isOpen = false;
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   const events = req.body.events;
@@ -55,6 +55,14 @@ function parseInput(text) {
 function createUser(userId) {
   if (!userData[userId]) {
     userData[userId] = {
+      entries: []
+    };
+  }
+}
+
+function resetAllUsers() {
+  for (const id in userData) {
+    userData[id] = {
       entries: []
     };
   }
@@ -112,14 +120,17 @@ async function handleEvent(event) {
 
   if (text === 'เปิด') {
     isOpen = true;
+    resetAllUsers();
+
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'เปิดรับคะแนนแล้ว'
+      text: 'เปิดรับคะแนนแล้ว\nเริ่มนับคะแนนใหม่ตั้งแต่ตอนนี้'
     });
   }
 
   if (text === 'ปิด') {
     isOpen = false;
+
     return client.replyMessage(event.replyToken, {
       type: 'text',
       text: 'ตอนนี้ปิดรับคะแนนแล้ว'
@@ -142,6 +153,9 @@ async function handleEvent(event) {
 
 สถานะตอนนี้: ${isOpen ? 'เปิดรับคะแนน' : 'ปิดรับคะแนน'}
 
+รูปแบบ:
+ขา/คะแนน
+
 ตัวอย่าง:
 1/100
 2/100
@@ -150,17 +164,17 @@ async function handleEvent(event) {
 5/100
 6/100
 
-หลายขาพร้อมกัน:
+เลือกหลายขาพร้อมกันได้:
 1/100 2/50 3/200
 
-ระบบกันคะแนน x2
+ระบบกันคะแนนไว้ x2
 เช่น 1/100 = กันไว้ 200
 
 คำสั่ง:
-เปิด = เปิดรับคะแนน
+เปิด = เปิดรับคะแนนและเริ่มนับใหม่
 ปิด = ปิดรับคะแนน
 c = ดูสรุปคะแนน
-x = ล้างคะแนน`
+x = ล้างคะแนนของคุณ`
     });
   }
 
@@ -172,11 +186,13 @@ x = ล้างคะแนน`
   }
 
   if (text.toLowerCase() === 'x') {
-    userData[userId] = { entries: [] };
+    userData[userId] = {
+      entries: []
+    };
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: 'ล้างคะแนนเรียบร้อยแล้ว'
+      text: 'ล้างคะแนนของคุณเรียบร้อยแล้ว'
     });
   }
 
@@ -189,29 +205,29 @@ x = ล้างคะแนน`
 
   const result = parseInput(text);
 
-  if (result.ok) {
-    createUser(userId);
-
-    let reply = 'บันทึกข้อมูลเรียบร้อย\n\n';
-
-    result.list.forEach(item => {
-      userData[userId].entries.push(item);
-
-      reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
-      reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
-    });
-
-    reply += getSummary(userId);
-
+  if (!result.ok) {
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: reply
+      text: result.message
     });
   }
 
+  createUser(userId);
+
+  let reply = 'บันทึกข้อมูลเรียบร้อย\n\n';
+
+  result.list.forEach(item => {
+    userData[userId].entries.push(item);
+
+    reply += `ขาที่ ${item.choice} +${item.points} คะแนน\n`;
+    reply += `กันคะแนนไว้ ${item.reserve} คะแนน\n\n`;
+  });
+
+  reply += getSummary(userId);
+
   return client.replyMessage(event.replyToken, {
     type: 'text',
-    text: 'พิมพ์ เมนู เพื่อดูวิธีใช้งาน'
+    text: reply
   });
 }
 
